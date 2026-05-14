@@ -1,0 +1,195 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../theme/app_theme.dart';
+import '../../providers/auth_provider.dart';
+
+class SignupScreen extends StatefulWidget {
+  const SignupScreen({super.key});
+
+  @override
+  State<SignupScreen> createState() => _SignupScreenState();
+}
+
+class _SignupScreenState extends State<SignupScreen> {
+  final _nameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  final _confirmCtrl = TextEditingController();
+  bool _obscure = true;
+  bool _obscure2 = true;
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    _confirmCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSignup() async {
+    final name = _nameCtrl.text.trim();
+    final email = _emailCtrl.text.trim();
+    final pass = _passCtrl.text;
+    final confirm = _confirmCtrl.text;
+
+    if (name.isEmpty || email.isEmpty || pass.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all fields')),
+      );
+      return;
+    }
+
+    if (pass != confirm) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Passwords do not match')),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
+    // Atelier 7 pattern: context.read for one-shot async method call
+    await context.read<AuthProvider>().signup(name, email, pass);
+    if (mounted) {
+      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _loading ? null : () => Navigator.pop(context),
+        ),
+        title: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.bar_chart_rounded, color: Colors.white),
+        ),
+        centerTitle: true,
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Create Account',
+                style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Join AudioMood and let the music find you',
+                style: TextStyle(color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 24),
+              const Text('Full Name', style: TextStyle(color: AppColors.textMuted)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _nameCtrl,
+                enabled: !_loading,
+                style: const TextStyle(color: Colors.black87, fontSize: 16),
+                decoration: const InputDecoration(
+                  hintText: 'Enter your full name',
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text('Email', style: TextStyle(color: AppColors.textMuted)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _emailCtrl,
+                enabled: !_loading,
+                style: const TextStyle(color: Colors.black87, fontSize: 16),
+                decoration: const InputDecoration(
+                  hintText: 'Enter your email',
+                  prefixIcon: Icon(Icons.email_outlined),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text('Password', style: TextStyle(color: AppColors.textMuted)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _passCtrl,
+                obscureText: _obscure,
+                enabled: !_loading,
+                style: const TextStyle(color: Colors.black87, fontSize: 16),
+                decoration: InputDecoration(
+                  hintText: 'Enter your password',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text('Confirm Password', style: TextStyle(color: AppColors.textMuted)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _confirmCtrl,
+                obscureText: _obscure2,
+                enabled: !_loading,
+                style: const TextStyle(color: Colors.black87, fontSize: 16),
+                decoration: InputDecoration(
+                  hintText: 'Confirm your password',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscure2 ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () => setState(() => _obscure2 = !_obscure2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _loading ? null : _handleSignup,
+                  child: _loading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Sign Up'),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('Already have an account? ',
+                        style: TextStyle(color: AppColors.textMuted)),
+                    GestureDetector(
+                      onTap: _loading
+                          ? null
+                          : () => Navigator.pushReplacementNamed(context, '/login'),
+                      child: const Text(
+                        'Log in',
+                        style: TextStyle(
+                          color: Colors.white,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
