@@ -7,6 +7,7 @@ class Playlist {
   final MoodType? mood;
   final String? coverUrl;
   final List<Song> songs;
+  final String? searchQuery;
 
   const Playlist({
     required this.id,
@@ -14,6 +15,7 @@ class Playlist {
     this.mood,
     this.coverUrl,
     required this.songs,
+    this.searchQuery,
   });
 
   Duration get totalDuration =>

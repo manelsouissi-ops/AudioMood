@@ -1,7 +1,11 @@
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/mood_provider.dart';
+import '../../providers/player_provider.dart';
+import '../../providers/favorites_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -23,6 +27,12 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  void _resetAllProviders() {
+    context.read<MoodProvider>().clear();
+    context.read<PlayerProvider>().stop();
+    context.read<FavoritesProvider>().clear();
+  }
+
   Future<void> _handleLogin() async {
     final email = _emailCtrl.text.trim();
     final pass = _passCtrl.text;
@@ -35,10 +45,69 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     setState(() => _loading = true);
-    // Atelier 7 pattern: context.read for one-shot async method call
-    await context.read<AuthProvider>().login(email, pass);
-    if (mounted) {
-      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+    // Store provider refs before async gap (BuildContext safety)
+    final auth = context.read<AuthProvider>();
+    final favs = context.read<FavoritesProvider>();
+    try {
+      // Atelier 7 pattern: context.read for one-shot async method call
+      await auth.login(email, pass);
+      await favs.syncFromCloud();
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      final msg = switch (e.code) {
+        'user-not-found' => 'No account found with this email',
+        'wrong-password' || 'invalid-credential' => 'Wrong email or password',
+        'invalid-email' => 'Invalid email format',
+        'user-disabled' => 'This account has been disabled',
+        'too-many-requests' => 'Too many attempts. Try again later',
+        _ => e.message ?? 'Login failed',
+      };
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Login failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _handleGoogleLogin() async {
+    setState(() => _loading = true);
+    _resetAllProviders();
+    // Store provider refs before async gap (BuildContext safety)
+    final auth = context.read<AuthProvider>();
+    final favs = context.read<FavoritesProvider>();
+    try {
+      // Atelier 7 pattern: context.read for one-shot async method call
+      await auth.loginWithGoogle();
+      await favs.syncFromCloud();
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Google sign-in failed')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString();
+      // User intentionally cancelled — don't show error
+      if (msg.contains('canceled') || msg.contains('cancelled') ||
+          msg.contains('sign_in_canceled')) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Google sign-in failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -49,7 +118,7 @@ class _LoginScreenState extends State<LoginScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
+          onPressed: _loading ? null : () => Navigator.pop(context),
         ),
       ),
       body: SafeArea(
@@ -66,19 +135,24 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: AppColors.primary,
                     borderRadius: BorderRadius.circular(18),
                   ),
-                  child: const Icon(Icons.bar_chart_rounded, color: Colors.white, size: 50),
+                  child: const Icon(Icons.bar_chart_rounded,
+                      color: Colors.white, size: 50),
                 ),
               ),
               const SizedBox(height: 24),
               const Center(
                 child: Text(
                   'Welcome Back',
-                  style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(height: 8),
               const Center(
-                child: Text('Sign in to continue', style: TextStyle(color: AppColors.textMuted)),
+                child: Text('Sign in to continue',
+                    style: TextStyle(color: AppColors.textMuted)),
               ),
               const SizedBox(height: 32),
               const Text('Email', style: TextStyle(color: AppColors.textMuted)),
@@ -93,7 +167,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text('Password', style: TextStyle(color: AppColors.textMuted)),
+              const Text('Password',
+                  style: TextStyle(color: AppColors.textMuted)),
               const SizedBox(height: 6),
               TextField(
                 controller: _passCtrl,
@@ -104,7 +179,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   hintText: 'Enter your password',
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
-                    icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+                    icon: Icon(
+                        _obscure ? Icons.visibility_off : Icons.visibility),
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),
@@ -114,11 +190,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: TextButton(
                   onPressed: _loading
                       ? null
-                      : () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Coming in Phase 4')),
-                          );
-                        },
+                      : () => Navigator.pushNamed(context, '/forgot-password'),
                   child: const Text(
                     'Forgot password?',
                     style: TextStyle(color: AppColors.accent),
@@ -139,6 +211,40 @@ class _LoginScreenState extends State<LoginScreen> {
                       : const Text('Log In'),
                 ),
               ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Expanded(child: Divider(color: AppColors.textMuted)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text('or continue with',
+                        style: TextStyle(
+                            color: AppColors.textMuted, fontSize: 12)),
+                  ),
+                  const Expanded(child: Divider(color: AppColors.textMuted)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _loading ? null : _handleGoogleLogin,
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black87,
+                    side: const BorderSide(color: Colors.white),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Text('G',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
+                  label: const Text('Continue with Google',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                ),
+              ),
               const SizedBox(height: 24),
               Center(
                 child: Row(
@@ -149,7 +255,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     GestureDetector(
                       onTap: _loading
                           ? null
-                          : () => Navigator.pushReplacementNamed(context, '/signup'),
+                          : () => Navigator.pushReplacementNamed(
+                              context, '/signup'),
                       child: const Text(
                         'Sign up',
                         style: TextStyle(

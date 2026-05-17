@@ -81,16 +81,22 @@ class PlayerScreen extends StatelessWidget {
                 color: Colors.grey[400],
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.album, size: 80, color: Colors.white),
-                    SizedBox(height: 8),
-                    Text('Album Art', style: TextStyle(color: Colors.white)),
-                  ],
-                ),
-              ),
+              clipBehavior: Clip.antiAlias,
+              child: song.coverUrl != null && song.coverUrl!.isNotEmpty
+                  ? Image.network(
+                      song.coverUrl!,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (_, child, progress) => progress == null
+                          ? child
+                          : const Center(
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white)),
+                      errorBuilder: (_, e, st) => const Center(
+                          child: Icon(Icons.album,
+                              size: 80, color: Colors.white)),
+                    )
+                  : const Center(
+                      child: Icon(Icons.album, size: 80, color: Colors.white)),
             ),
             const SizedBox(height: 24),
             Row(
@@ -155,8 +161,11 @@ class PlayerScreen extends StatelessWidget {
                     icon: const Icon(Icons.shuffle, color: Colors.white),
                     onPressed: () {}),
                 IconButton(
-                    icon: const Icon(Icons.skip_previous, size: 40, color: Colors.white),
-                    onPressed: () {}),
+                    icon: const Icon(Icons.skip_previous,
+                        size: 40, color: Colors.white),
+                    // Atelier 7 pattern: context.read for one-shot method call
+                    onPressed: () =>
+                        context.read<PlayerProvider>().previous()),
                 Container(
                   width: 70,
                   height: 70,

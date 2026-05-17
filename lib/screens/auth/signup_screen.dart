@@ -1,7 +1,11 @@
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/mood_provider.dart';
+import '../../providers/player_provider.dart';
+import '../../providers/favorites_provider.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -28,6 +32,12 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
+  void _resetAllProviders() {
+    context.read<MoodProvider>().clear();
+    context.read<PlayerProvider>().stop();
+    context.read<FavoritesProvider>().clear();
+  }
+
   Future<void> _handleSignup() async {
     final name = _nameCtrl.text.trim();
     final email = _emailCtrl.text.trim();
@@ -40,7 +50,6 @@ class _SignupScreenState extends State<SignupScreen> {
       );
       return;
     }
-
     if (pass != confirm) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Passwords do not match')),
@@ -49,10 +58,67 @@ class _SignupScreenState extends State<SignupScreen> {
     }
 
     setState(() => _loading = true);
-    // Atelier 7 pattern: context.read for one-shot async method call
-    await context.read<AuthProvider>().signup(name, email, pass);
-    if (mounted) {
-      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+    // Store provider refs before async gap (BuildContext safety)
+    final auth = context.read<AuthProvider>();
+    final favs = context.read<FavoritesProvider>();
+    try {
+      // Atelier 7 pattern: context.read for one-shot async method call
+      await auth.signup(name, email, pass);
+      await favs.syncFromCloud();
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      final msg = switch (e.code) {
+        'email-already-in-use' => 'An account already exists with this email',
+        'invalid-email' => 'Invalid email format',
+        'weak-password' => 'Password is too weak (at least 6 characters)',
+        'operation-not-allowed' => 'Email/password signup is not enabled',
+        _ => e.message ?? 'Signup failed',
+      };
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Signup failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _handleGoogleLogin() async {
+    setState(() => _loading = true);
+    _resetAllProviders();
+    // Store provider refs before async gap (BuildContext safety)
+    final auth = context.read<AuthProvider>();
+    final favs = context.read<FavoritesProvider>();
+    try {
+      // Atelier 7 pattern: context.read for one-shot async method call
+      await auth.loginWithGoogle();
+      await favs.syncFromCloud();
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Google sign-in failed')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString();
+      if (msg.contains('canceled') || msg.contains('cancelled') ||
+          msg.contains('sign_in_canceled')) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Google sign-in failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -84,7 +150,10 @@ class _SignupScreenState extends State<SignupScreen> {
             children: [
               const Text(
                 'Create Account',
-                style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 6),
               const Text(
@@ -92,7 +161,8 @@ class _SignupScreenState extends State<SignupScreen> {
                 style: TextStyle(color: AppColors.textMuted),
               ),
               const SizedBox(height: 24),
-              const Text('Full Name', style: TextStyle(color: AppColors.textMuted)),
+              const Text('Full Name',
+                  style: TextStyle(color: AppColors.textMuted)),
               const SizedBox(height: 6),
               TextField(
                 controller: _nameCtrl,
@@ -116,7 +186,8 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              const Text('Password', style: TextStyle(color: AppColors.textMuted)),
+              const Text('Password',
+                  style: TextStyle(color: AppColors.textMuted)),
               const SizedBox(height: 6),
               TextField(
                 controller: _passCtrl,
@@ -127,13 +198,15 @@ class _SignupScreenState extends State<SignupScreen> {
                   hintText: 'Enter your password',
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
-                    icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+                    icon: Icon(
+                        _obscure ? Icons.visibility_off : Icons.visibility),
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),
               ),
               const SizedBox(height: 14),
-              const Text('Confirm Password', style: TextStyle(color: AppColors.textMuted)),
+              const Text('Confirm Password',
+                  style: TextStyle(color: AppColors.textMuted)),
               const SizedBox(height: 6),
               TextField(
                 controller: _confirmCtrl,
@@ -144,7 +217,8 @@ class _SignupScreenState extends State<SignupScreen> {
                   hintText: 'Confirm your password',
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
-                    icon: Icon(_obscure2 ? Icons.visibility_off : Icons.visibility),
+                    icon: Icon(
+                        _obscure2 ? Icons.visibility_off : Icons.visibility),
                     onPressed: () => setState(() => _obscure2 = !_obscure2),
                   ),
                 ),
@@ -163,6 +237,40 @@ class _SignupScreenState extends State<SignupScreen> {
                       : const Text('Sign Up'),
                 ),
               ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Expanded(child: Divider(color: AppColors.textMuted)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text('or continue with',
+                        style: TextStyle(
+                            color: AppColors.textMuted, fontSize: 12)),
+                  ),
+                  const Expanded(child: Divider(color: AppColors.textMuted)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _loading ? null : _handleGoogleLogin,
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black87,
+                    side: const BorderSide(color: Colors.white),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Text('G',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
+                  label: const Text('Continue with Google',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                ),
+              ),
               const SizedBox(height: 24),
               Center(
                 child: Row(
@@ -173,7 +281,8 @@ class _SignupScreenState extends State<SignupScreen> {
                     GestureDetector(
                       onTap: _loading
                           ? null
-                          : () => Navigator.pushReplacementNamed(context, '/login'),
+                          : () => Navigator.pushReplacementNamed(
+                              context, '/login'),
                       child: const Text(
                         'Log in',
                         style: TextStyle(

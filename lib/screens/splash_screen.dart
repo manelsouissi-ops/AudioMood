@@ -1,6 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
+import '../providers/auth_provider.dart';
+import '../providers/favorites_provider.dart';
+import '../providers/settings_provider.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -13,14 +16,40 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    // After 2 seconds, navigate to onboarding.
-    // Later in Phase 3 with SharedPreferences, we'll check if user is logged in
-    // and skip straight to /home if yes.
-    Timer(const Duration(seconds: 2), () {
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, '/onboarding');
-      }
-    });
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    // Store provider refs before any async gap (BuildContext safety)
+    // Atelier 7 pattern: context.read for one-shot async call
+    final auth = context.read<AuthProvider>();
+    final favs = context.read<FavoritesProvider>();
+    final settings = context.read<SettingsProvider>();
+
+    // 1. Resolve auth state + load persisted settings in parallel
+    debugPrint('[SPLASH] calling auth.initialize()');
+    await Future.wait([
+      auth.initialize(),
+      settings.load(),
+    ]);
+    debugPrint('[SPLASH] auth done, isLoggedIn = ${auth.isLoggedIn}');
+
+    // NOTE: There is no favorites.load() — no SharedPreferences layer exists.
+    // Favorites are synced exclusively from Firestore via syncFromCloud().
+
+    // 2. Sync favorites from cloud (only if signed in), then minimum splash delay
+    debugPrint('[SPLASH] calling favorites.syncFromCloud() (isLoggedIn=${auth.isLoggedIn})');
+    await Future.wait([
+      Future.delayed(const Duration(seconds: 1)),
+      if (auth.isLoggedIn) favs.syncFromCloud(),
+    ]);
+
+    if (!mounted) return;
+
+    // 3. Navigate based on auth state
+    final dest = auth.isLoggedIn ? '/home' : '/onboarding';
+    debugPrint('[SPLASH] all bootstrap done, navigating to $dest');
+    Navigator.pushReplacementNamed(context, dest);
   }
 
   @override
@@ -31,7 +60,6 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Logo placeholder — replace with your real AUDIOMOOD logo asset later
             Container(
               width: 140,
               height: 140,
@@ -43,7 +71,8 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
                 borderRadius: BorderRadius.circular(28),
               ),
-              child: const Icon(Icons.bar_chart_rounded, color: Colors.white, size: 90),
+              child: const Icon(Icons.bar_chart_rounded,
+                  color: Colors.white, size: 90),
             ),
             const SizedBox(height: 24),
             const Text(
@@ -60,6 +89,8 @@ class _SplashScreenState extends State<SplashScreen> {
               'Feel your music',
               style: TextStyle(color: AppColors.textMuted, fontSize: 14),
             ),
+            const SizedBox(height: 40),
+            const CircularProgressIndicator(color: AppColors.primary),
           ],
         ),
       ),

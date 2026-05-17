@@ -5,33 +5,34 @@ import '../widgets/main_scaffold.dart';
 import '../providers/auth_provider.dart';
 import '../providers/mood_provider.dart';
 import '../providers/player_provider.dart';
-import '../models/mood.dart';
 import '../models/playlist.dart';
 import '../models/song.dart';
-import '../data/mock_data.dart';
+import '../services/firebase_service.dart';
+import '../services/deezer_service.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
-  void _simulateMoodDetection(BuildContext context) {
-    // Atelier 7 pattern: context.read for one-shot method call
-    final moodProvider = context.read<MoodProvider>();
-    final current = moodProvider.current;
-    final values = MoodType.values;
-    final nextIndex = current == null
-        ? 0
-        : (values.indexOf(current.mood) + 1) % values.length;
-    final picked = values[nextIndex];
-    moodProvider.setMood(picked, 0.85);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Mood detected: ${picked.emoji} ${picked.label}')),
-    );
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  // Cache the future so rebuilds don't re-fetch (Atelier 9 pattern)
+  late final Future<List<Playlist>> _playlistsFuture;
+  // Tracks which playlist card is currently loading songs from Deezer
+  String? _loadingPlaylistId;
+
+  @override
+  void initState() {
+    super.initState();
+    _playlistsFuture = FirebaseService().fetchPlaylists();
   }
 
   @override
   Widget build(BuildContext context) {
-    final playlists = MockData.playlists;
-    final recent = MockData.recentlyPlayed;
+    // Atelier 7 pattern: context.watch rebuilds when player state changes
+    final recent = context.watch<PlayerProvider>().recentlyPlayed;
 
     return MainScaffold(
       currentIndex: 0,
@@ -47,25 +48,76 @@ class HomeScreen extends StatelessWidget {
               const SizedBox(height: 24),
               const Text(
                 'Recommended for You',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
-              SizedBox(
-                height: 180,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: playlists.length,
-                  separatorBuilder: (context, index) => const SizedBox(width: 12),
-                  itemBuilder: (context, i) => _playlistCard(context, playlists[i]),
-                ),
+              // Atelier 9 pattern: FutureBuilder for Firestore list
+              FutureBuilder<List<Playlist>>(
+                future: _playlistsFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const SizedBox(
+                      height: 180,
+                      child: Center(
+                          child: CircularProgressIndicator(
+                              color: AppColors.primary)),
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return SizedBox(
+                      height: 180,
+                      child: Center(
+                        child: Text('Error: ${snapshot.error}',
+                            style: const TextStyle(
+                                color: AppColors.textMuted)),
+                      ),
+                    );
+                  }
+                  final playlists = snapshot.data ?? [];
+                  if (playlists.isEmpty) {
+                    return const SizedBox(
+                      height: 180,
+                      child: Center(
+                        child: Text(
+                          'No playlists yet — add some in Firestore',
+                          style: TextStyle(color: AppColors.textMuted),
+                        ),
+                      ),
+                    );
+                  }
+                  return SizedBox(
+                    height: 180,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: playlists.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(width: 12),
+                      itemBuilder: (context, i) =>
+                          _playlistCard(context, playlists[i]),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 24),
               const Text(
                 'Recently Played',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              ...recent.map((s) => _songTile(context, s)),
+              if (recent.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Text('No songs played yet',
+                      style: TextStyle(color: AppColors.textMuted)),
+                )
+              else
+                ...recent.map((s) => _songTile(context, s)),
             ],
           ),
         ),
@@ -89,17 +141,21 @@ class HomeScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Good morning 👋',
-                  style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                  style:
+                      TextStyle(color: AppColors.textMuted, fontSize: 13)),
               Text(
                 auth.displayName,
                 style: const TextStyle(
-                    color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold),
               ),
             ],
           ),
         ),
         IconButton(
-            icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+            icon: const Icon(Icons.notifications_outlined,
+                color: Colors.white),
             onPressed: () {}),
         const CircleAvatar(radius: 18, backgroundColor: Colors.grey),
       ],
@@ -119,7 +175,9 @@ class HomeScreen extends StatelessWidget {
           const Text(
             'How are you feeling today?',
             style: TextStyle(
-                color: AppColors.textOnLight, fontSize: 16, fontWeight: FontWeight.bold),
+                color: AppColors.textOnLight,
+                fontSize: 16,
+                fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           // Atelier 7 pattern: Consumer<MoodProvider> for granular sub-tree rebuild
@@ -127,26 +185,31 @@ class HomeScreen extends StatelessWidget {
             builder: (context, mood, _) {
               if (mood.hasDetectedMood) {
                 final result = mood.current!;
-                return Container(
-                  height: 130,
-                  decoration: BoxDecoration(
-                    color: result.mood.color.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(result.mood.emoji,
-                            style: const TextStyle(fontSize: 50)),
-                        const SizedBox(height: 8),
-                        Text(
-                          '${result.mood.label} • ${result.confidencePercent}',
-                          style: const TextStyle(
-                              color: AppColors.textOnLight,
-                              fontWeight: FontWeight.w600),
-                        ),
-                      ],
+                // Tappable — takes user back to the full mood result screen
+                return GestureDetector(
+                  onTap: () =>
+                      Navigator.pushNamed(context, '/mood-result'),
+                  child: Container(
+                    height: 130,
+                    decoration: BoxDecoration(
+                      color: result.mood.color.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(result.mood.emoji,
+                              style: const TextStyle(fontSize: 50)),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${result.mood.label} • ${result.confidencePercent}',
+                            style: const TextStyle(
+                                color: AppColors.textOnLight,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -158,7 +221,8 @@ class HomeScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Center(
-                    child: Icon(Icons.camera_alt_outlined, size: 50, color: Colors.grey)),
+                    child: Icon(Icons.camera_alt_outlined,
+                        size: 50, color: Colors.grey)),
               );
             },
           ),
@@ -167,8 +231,10 @@ class HomeScreen extends StatelessWidget {
             width: double.infinity,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black, foregroundColor: Colors.white),
-              onPressed: () => _simulateMoodDetection(context),
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white),
+              onPressed: () =>
+                  Navigator.pushNamed(context, '/camera-scan'),
               child: const Text('Detect My Mood'),
             ),
           ),
@@ -177,21 +243,36 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _playPlaylist(Playlist p) async {
+    setState(() => _loadingPlaylistId = p.id);
+    // Capture State.context refs before async gap — mounted guards State.context
+    final player = context.read<PlayerProvider>();
+    try {
+      final query = p.searchQuery?.isNotEmpty == true ? p.searchQuery! : p.name;
+      final songs = await DeezerService().searchTracks(query);
+      if (songs.isEmpty) throw Exception('No songs found for "${p.name}"');
+      if (!mounted) return;
+      await player.play(songs.first, queue: songs.skip(1).toList());
+      if (!mounted) return;
+      Navigator.pushNamed(context, '/player');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _loadingPlaylistId = null);
+    }
+  }
+
   Widget _playlistCard(BuildContext context, Playlist p) {
     final moodColor = p.mood?.color ?? Colors.grey;
     final badgeLabel =
         p.mood != null ? '${p.mood!.emoji} ${p.mood!.label}' : null;
+    final isLoading = _loadingPlaylistId == p.id;
 
     return GestureDetector(
-      onTap: () {
-        if (p.songs.isEmpty) return;
-        // Atelier 7 pattern: context.read for one-shot method call
-        context.read<PlayerProvider>().play(
-              p.songs.first,
-              queue: p.songs.skip(1).toList(),
-            );
-        Navigator.pushNamed(context, '/player');
-      },
+      onTap: isLoading ? null : () => _playPlaylist(p),
       child: Container(
         width: 130,
         decoration: BoxDecoration(
@@ -205,10 +286,15 @@ class HomeScreen extends StatelessWidget {
               height: 110,
               decoration: BoxDecoration(
                 color: moodColor,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(12)),
               ),
-              child: const Center(
-                  child: Icon(Icons.music_note, size: 40, color: Colors.white)),
+              child: Center(
+                child: isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Icon(Icons.music_note,
+                        size: 40, color: Colors.white),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.all(8),
@@ -217,20 +303,22 @@ class HomeScreen extends StatelessWidget {
                 children: [
                   Text(p.name,
                       style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.w600),
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                   if (badgeLabel != null) ...[
                     const SizedBox(height: 4),
                     Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: AppColors.primary,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(badgeLabel,
-                          style: const TextStyle(color: Colors.white, fontSize: 11),
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 11),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis),
                     ),
@@ -247,16 +335,34 @@ class HomeScreen extends StatelessWidget {
   Widget _songTile(BuildContext context, Song s) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: Container(
-        width: 50,
-        height: 50,
-        decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(8)),
-        child: const Icon(Icons.music_note, color: Colors.white),
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          width: 50,
+          height: 50,
+          child: s.coverUrl != null && s.coverUrl!.isNotEmpty
+              ? Image.network(
+                  s.coverUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, e, st) =>
+                      const ColoredBox(
+                        color: Colors.grey,
+                        child: Icon(Icons.music_note, color: Colors.white),
+                      ),
+                )
+              : const ColoredBox(
+                  color: Colors.grey,
+                  child: Icon(Icons.music_note, color: Colors.white),
+                ),
+        ),
       ),
       title: Text(s.title,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-      subtitle: Text(s.artist, style: const TextStyle(color: AppColors.textMuted)),
-      trailing: Text(s.durationLabel, style: const TextStyle(color: AppColors.textMuted)),
+          style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.w600)),
+      subtitle:
+          Text(s.artist, style: const TextStyle(color: AppColors.textMuted)),
+      trailing: Text(s.durationLabel,
+          style: const TextStyle(color: AppColors.textMuted)),
       onTap: () {
         // Atelier 7 pattern: context.read for one-shot method call
         context.read<PlayerProvider>().play(s);

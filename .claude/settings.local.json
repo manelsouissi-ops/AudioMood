@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Set-Location \"c:\\\\Users\\\\lotfi\\\\Desktop\\\\Flutter\\\\audiomood\"; flutter analyze --no-fatal-infos 2>&1; Write-Host \"EXIT:$LASTEXITCODE\")"
+    ]
+  }
+}

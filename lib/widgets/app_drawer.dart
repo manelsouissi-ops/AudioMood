@@ -40,6 +40,7 @@ class AppDrawer extends StatelessWidget {
           _drawerTile(context, Icons.search, 'Search', '/search'),
           _drawerTile(context, Icons.play_circle_filled, 'Player', '/player'),
           _drawerTile(context, Icons.person, 'Profile', '/profile'),
+          _drawerTile(context, Icons.favorite, 'My Favorites', '/favorites'),
           const Divider(color: Colors.white24),
           _drawerTile(context, Icons.settings, 'Settings', '/settings'),
           ListTile(
