@@ -1,21 +1,53 @@
 # AudioMood
 
-AudioMood is a Flutter app that combines mood-based music discovery, authentication, and playback flows in a single mobile experience. The app boots through Firebase, uses Provider for state management, and organizes the UI around splash, onboarding, auth, home, search, favorites, profile, settings, mood scan, and player screens.
+AudioMood is a Flutter mini-project that combines mood detection, music search, authentication, persistence, and playback in one app. The codebase now uses Riverpod at the root, Firebase for backend services, Deezer for music search, and a simple chart to visualize recent detected moods.
+
+## Criterion Mapping
+
+### 1. Architecture and Code Quality
+
+- Riverpod is used consistently through `ProviderScope` and `NotifierProvider` state classes.
+- The project now exposes a clearer `core/features/models/widgets` layer under `lib/core/` for shared structure.
+- Reusable widgets are factored out for the app shell, drawer, and mood chart.
+- Empty-list and network failure cases are handled defensively so the app does not crash on missing data.
+
+### 2. UI and UX
+
+- The app uses a dark Material theme with consistent colors and spacing.
+- Loading states are present in playlist and authentication flows.
+- Snackbars are shown for empty results and user-facing errors.
+- The mood result page now includes a small chart to make the experience more informative.
+
+### 3. Data and API Integration
+
+- Firebase Core initializes the app.
+- Firebase Auth handles sign up, login, Google sign-in, and password reset.
+- Firestore stores user and playlist data.
+- Deezer is used as the music API backend for track search.
+- SharedPreferences is used for local settings persistence.
+- Mood history is visualized locally from the Riverpod state.
+
+### 4. Demo, Mastery, and Documentation
+
+- The app has a complete route flow from splash to home, mood detection, search, favorites, profile, and settings.
+- The README documents the architecture, dependencies, flow, and evaluation criteria.
+- The code changes now make it easier to explain the backend, state management, and persistence choices during a live demo.
 
 ## What’s Included
 
 - Firebase initialization with generated platform options
-- Email/password authentication flow
+- Email/password and Google authentication flow
 - Mood detection flow with camera-based screens
+- Mood result screen with playlist launch and chart visualization
 - Music playback UI with a dedicated player screen
 - Favorites, search, profile, and settings screens
-- App-wide state management with `MultiProvider`
+- App-wide state management with Riverpod
 - Material design theme and reusable widgets
 
 ## Tech Stack
 
 - Flutter 3.41.x / Dart 3.11.x
-- Provider for app state
+- Riverpod for app state
 - Firebase Core, Auth, and Firestore
 - Google Sign-In
 - Image Picker for camera/media input
@@ -23,88 +55,45 @@ AudioMood is a Flutter app that combines mood-based music discovery, authenticat
 - SharedPreferences for local persistence
 - HTTP for remote API calls
 
-## App Flow
-
-The app starts in [lib/main.dart](lib/main.dart), initializes Firebase, and registers these providers at the root:
-
-- `AuthProvider`
-- `MoodProvider`
-- `PlayerProvider`
-- `FavoritesProvider`
-- `SettingsProvider`
-
-From there, routing takes the user through:
-
-- Splash
-- Onboarding
-- Login / Sign Up / Forgot Password
-- Home
-- Camera Scan
-- Mood Result
-- Player
-- Search
-- Favorites
-- Profile
-- Settings
-
 ## Project Structure
 
 ```text
 lib/
-├── firebase_options.dart
-├── main.dart
+├── core/
+│   ├── features/
+│   │   └── mood/
+│   │       └── presentation/widgets/
+│   ├── models/
+│   ├── theme/
+│   └── widgets/
+├── models/
 ├── providers/
 ├── screens/
-│   ├── auth/
-│   └── mood/
 ├── services/
-├── theme/
-└── widgets/
+└── main.dart
 ```
 
 Key files:
 
 - [lib/main.dart](lib/main.dart) - app bootstrap, Firebase init, and route table
-- [lib/services/mood_service.dart](lib/services/mood_service.dart) - mood-related logic
-- [lib/services/firebase_service.dart](lib/services/firebase_service.dart) - Firebase helpers
-- [lib/screens/home_screen.dart](lib/screens/home_screen.dart) - main user entry screen
-- [lib/screens/player_screen.dart](lib/screens/player_screen.dart) - audio playback UI
+- [lib/core/theme/app_theme.dart](lib/core/theme/app_theme.dart) - shared theme and colors
+- [lib/core/widgets/main_scaffold.dart](lib/core/widgets/main_scaffold.dart) - reusable authenticated shell
+- [lib/core/features/mood/presentation/widgets/mood_history_chart.dart](lib/core/features/mood/presentation/widgets/mood_history_chart.dart) - mood visualization
 - [lib/providers/auth_provider.dart](lib/providers/auth_provider.dart) - auth state
+- [lib/providers/mood_provider.dart](lib/providers/mood_provider.dart) - mood state
+- [lib/services/firebase_service.dart](lib/services/firebase_service.dart) - Firestore helper
+- [lib/services/deezer_service.dart](lib/services/deezer_service.dart) - music API client
 
-## Setup
-
-### Prerequisites
-
-- Flutter SDK installed and on your PATH
-- A connected device, emulator, or simulator
-- Firebase project configured for Android / iOS / web as needed
-
-### Install Dependencies
+## Run
 
 ```bash
 flutter pub get
-```
-
-### Run the App
-
-```bash
 flutter run
 ```
 
-## Firebase Notes
+## Notes for Evaluation
 
-This project includes Firebase configuration files and generated options. If you create a new Firebase project or change platforms, regenerate the config so that [lib/firebase_options.dart](lib/firebase_options.dart) and the native platform files stay in sync.
-
-## Configuration
-
-If you change API endpoints or storage behavior, check the service files in [lib/services/](lib/services/) and the keys/constants used by the providers.
-
-## Development Notes
-
-- Keep app state changes inside the provider layer when possible.
-- Add new screens through route registration in [lib/main.dart](lib/main.dart).
-- Update the README whenever you add a major feature or change the launch flow.
-
-## Status
-
-The current codebase includes the main app shell, auth flow, mood flow, playback screen, search, favorites, profile, and settings. This README now reflects the whole project rather than only the initial scaffold.
+- The app satisfies the required authentication space with simple forms plus Google sign-in.
+- The backend/frontend communication requirement is covered by Firebase and Deezer API calls.
+- Persistence is justified by using Firestore online and SharedPreferences locally.
+- The chart is intentionally simple so it can be demonstrated clearly in a mini-project review.

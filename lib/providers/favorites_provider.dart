@@ -1,76 +1,61 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/song.dart';
 
-class FavoritesProvider with ChangeNotifier {
-  final List<Song> _favorites = [];
+// ── Notifier ─────────────────────────────────────────────────────────────────
+// State is List<Song> — the list of favorited songs.
 
-  List<Song> get favorites => List.unmodifiable(_favorites);
-  int get count => _favorites.length;
+class FavoritesNotifier extends Notifier<List<Song>> {
+  @override
+  List<Song> build() => [];
 
-  bool isFavorite(String songId) => _favorites.any((s) => s.id == songId);
-
-  // NOTE: There is NO load() method and NO SharedPreferences in this class.
-  // Favorites are only persisted to Firestore and synced via syncFromCloud().
+  bool isFavorite(String songId) => state.any((s) => s.id == songId);
 
   void toggle(Song song) {
     debugPrint('[FAV] toggle called for song id=${song.id} title=${song.title}');
     if (isFavorite(song.id)) {
-      _favorites.removeWhere((s) => s.id == song.id);
+      state = state.where((s) => s.id != song.id).toList();
     } else {
-      _favorites.add(song);
+      state = [...state, song];
     }
-    debugPrint(
-        '[FAV] _favorites now has ${_favorites.length} songs: ${_favorites.map((s) => s.id).toList()}');
-    notifyListeners(); // Atelier 7 pattern
+    debugPrint('[FAV] _favorites now has ${state.length} songs: ${state.map((s) => s.id).toList()}');
     _persistToCloud();
   }
 
-  void clear() {
-    _favorites.clear();
-    notifyListeners(); // Atelier 7 pattern
-  }
+  void clear() => state = [];
 
-  /// Fire-and-forget: persist full Song objects to Firestore so they can be
-  /// restored without a collectionGroup query (Deezer songs are not in Firestore).
   void _persistToCloud() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     debugPrint('[FAV] persistToCloud: currentUser uid = $uid');
     if (uid == null) return;
-    debugPrint(
-        '[FAV] persistToCloud: writing ${_favorites.length} songs to Firestore');
+    debugPrint('[FAV] persistToCloud: writing ${state.length} songs to Firestore');
     FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
         .set(
-          {'favoriteSongs': _favorites.map((s) => s.toMap()).toList()},
+          {'favoriteSongs': state.map((s) => s.toMap()).toList()},
           SetOptions(merge: true),
         )
         .then((_) => debugPrint('[FAV] persistToCloud: Firestore write complete'))
-        .catchError((Object e) =>
-            debugPrint('[FAV] persistToCloud ERROR: $e'));
+        .catchError((Object e) => debugPrint('[FAV] persistToCloud ERROR: $e'));
   }
 
-  /// Called from splash after sign-in is confirmed, and after every login.
-  /// Reads full Song maps from Firestore — no collectionGroup query needed.
   Future<void> syncFromCloud() async {
-    debugPrint(
-        '[FAV] syncFromCloud START, currentUser = ${FirebaseAuth.instance.currentUser?.uid}');
+    debugPrint('[FAV] syncFromCloud START, currentUser = ${FirebaseAuth.instance.currentUser?.uid}');
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       debugPrint('[FAV] syncFromCloud: no currentUser, aborting');
       return;
     }
-
     try {
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .get();
 
-      debugPrint(
-          '[FAV] syncFromCloud: user doc exists=${userDoc.exists}, favoriteSongs field = ${userDoc.data()?['favoriteSongs']}');
+      debugPrint('[FAV] syncFromCloud: user doc exists=${userDoc.exists}, favoriteSongs field = ${userDoc.data()?['favoriteSongs']}');
 
       if (!userDoc.exists) return;
       final data = userDoc.data();
@@ -79,15 +64,14 @@ class FavoritesProvider with ChangeNotifier {
       final raw = data['favoriteSongs'];
       if (raw is! List || raw.isEmpty) return;
 
-      final List<String> ids = raw
+      final ids = raw
           .whereType<Map>()
           .map((m) => m['id']?.toString() ?? '')
           .where((id) => id.isNotEmpty)
           .toList();
       debugPrint('[FAV] parsed ${ids.length} favorite IDs: $ids');
 
-      // Rebuild Song objects directly from stored maps — no Firestore query needed
-      final List<Song> cloudFavorites = raw
+      final cloudFavorites = raw
           .whereType<Map>()
           .map((m) {
             try {
@@ -99,16 +83,16 @@ class FavoritesProvider with ChangeNotifier {
           .whereType<Song>()
           .toList();
 
-      _favorites
-        ..clear()
-        ..addAll(cloudFavorites);
-
-      notifyListeners(); // Atelier 7 pattern
-      debugPrint(
-          '[FAV] syncFromCloud DONE, _favorites now has ${_favorites.length} songs');
+      state = cloudFavorites;
+      debugPrint('[FAV] syncFromCloud DONE, _favorites now has ${state.length} songs');
     } catch (e, stack) {
       debugPrint('[FAV] syncFromCloud ERROR: $e');
       debugPrint('[FAV] stack: $stack');
     }
   }
 }
+
+// ── Provider ─────────────────────────────────────────────────────────────────
+
+final favoritesProvider =
+    NotifierProvider<FavoritesNotifier, List<Song>>(FavoritesNotifier.new);

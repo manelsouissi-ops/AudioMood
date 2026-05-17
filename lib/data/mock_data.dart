@@ -74,10 +74,7 @@ class MockData {
   static List<Song> get recentlyPlayed => _songs.take(2).toList();
 
   static Playlist? playlistForMood(MoodType mood) {
-    try {
-      return _playlists.firstWhere((p) => p.mood == mood);
-    } catch (_) {
-      return null;
-    }
+    final matches = _playlists.where((p) => p.mood == mood).toList();
+    return matches.isEmpty ? null : matches.first;
   }
 }

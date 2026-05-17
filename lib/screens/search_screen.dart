@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
 import '../widgets/main_scaffold.dart';
 import '../models/mood.dart';
@@ -8,24 +8,22 @@ import '../providers/player_provider.dart';
 import '../services/deezer_service.dart';
 import '../services/search_history_service.dart';
 
-class SearchScreen extends StatefulWidget {
+class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
 
   @override
-  State<SearchScreen> createState() => _SearchScreenState();
+  ConsumerState<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> {
+class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _searchCtrl = TextEditingController();
   final _historyService = SearchHistoryService();
-
   List<String> _recentSearches = [];
   List<Song> _results = [];
   bool _isSearching = false;
   bool _hasSearched = false;
   String? _error;
 
-  // Maps MoodType to a Deezer search term (same mapping as mood_result_screen)
   static String _queryForMood(MoodType mood) => switch (mood) {
         MoodType.happy => 'happy',
         MoodType.sad => 'sad songs',
@@ -55,22 +53,16 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<void> _performSearch(String query) async {
     final q = query.trim();
     if (q.isEmpty) return;
-
     setState(() {
       _isSearching = true;
       _hasSearched = true;
       _error = null;
       _results = [];
     });
-
     try {
-      // Atelier 10 pattern: call the Deezer service
       final songs = await DeezerService().searchTracks(q);
       if (!mounted) return;
-      setState(() {
-        _results = songs;
-        _isSearching = false;
-      });
+      setState(() { _results = songs; _isSearching = false; });
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -78,17 +70,14 @@ class _SearchScreenState extends State<SearchScreen> {
         _isSearching = false;
       });
     }
-
-    // Persist to search history (Atelier 8 pattern)
     await _historyService.addRecentSearch(q);
     if (!mounted) return;
     await _loadHistory();
   }
 
   void _searchByMood(MoodType mood) {
-    final term = _queryForMood(mood);
     _searchCtrl.text = mood.label;
-    _performSearch(term);
+    _performSearch(_queryForMood(mood));
   }
 
   Future<void> _removeRecent(String term) async {
@@ -100,10 +89,7 @@ class _SearchScreenState extends State<SearchScreen> {
   void _clearSearch() {
     _searchCtrl.clear();
     setState(() {
-      _hasSearched = false;
-      _results = [];
-      _error = null;
-      _isSearching = false;
+      _hasSearched = false; _results = []; _error = null; _isSearching = false;
     });
   }
 
@@ -120,19 +106,13 @@ class _SearchScreenState extends State<SearchScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Search',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold),
-                    ),
+                    const Text('Search',
+                        style: TextStyle(color: Colors.white, fontSize: 28,
+                            fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
-                    // Search bar
                     TextField(
                       controller: _searchCtrl,
-                      style: const TextStyle(
-                          color: Colors.black87, fontSize: 16),
+                      style: const TextStyle(color: Colors.black87, fontSize: 16),
                       textInputAction: TextInputAction.search,
                       onSubmitted: _performSearch,
                       decoration: InputDecoration(
@@ -141,8 +121,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         suffixIcon: _searchCtrl.text.isNotEmpty
                             ? IconButton(
                                 icon: const Icon(Icons.close),
-                                onPressed: _clearSearch,
-                              )
+                                onPressed: _clearSearch)
                             : null,
                       ),
                     ),
@@ -150,19 +129,16 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
               ),
             ),
-            // Rebuild suffix icon when text changes
             SliverToBoxAdapter(
               child: ValueListenableBuilder<TextEditingValue>(
                 valueListenable: _searchCtrl,
                 builder: (_, value, child) => const SizedBox.shrink(),
               ),
             ),
-            // Body: loading / results / browse
             if (_isSearching)
               const SliverFillRemaining(
-                child: Center(
-                    child:
-                        CircularProgressIndicator(color: AppColors.primary)),
+                child: Center(child: CircularProgressIndicator(
+                    color: AppColors.primary)),
               )
             else if (_hasSearched)
               _buildResultsSliver()
@@ -177,30 +153,23 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _buildResultsSliver() {
     if (_error != null) {
       return SliverFillRemaining(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(_error!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textMuted)),
-          ),
-        ),
+        child: Center(child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(_error!, textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textMuted)),
+        )),
       );
     }
     if (_results.isEmpty) {
       return const SliverFillRemaining(
-        child: Center(
-          child: Text('No results found',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 16)),
-        ),
+        child: Center(child: Text('No results found',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 16))),
       );
     }
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, i) => _SongResultTile(
-          song: _results[i],
-          queue: _results.skip(i + 1).toList(),
-        ),
+          song: _results[i], queue: _results.skip(i + 1).toList()),
         childCount: _results.length,
       ),
     );
@@ -213,12 +182,9 @@ class _SearchScreenState extends State<SearchScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Recent Searches
             if (_recentSearches.isNotEmpty) ...[
               const Text('Recent Searches',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
+                  style: TextStyle(color: Colors.white, fontSize: 18,
                       fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               ..._recentSearches.map((term) => ListTile(
@@ -236,24 +202,17 @@ class _SearchScreenState extends State<SearchScreen> {
                   )),
               const SizedBox(height: 24),
             ],
-
-            // Browse by Mood
             const Text('Browse by Mood',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
+                style: TextStyle(color: Colors.white, fontSize: 18,
                     fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: MoodType.values.length,
-              gridDelegate:
-                  const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.6,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2, crossAxisSpacing: 12,
+                mainAxisSpacing: 12, childAspectRatio: 1.6,
               ),
               itemBuilder: (context, i) {
                 final mood = MoodType.values[i];
@@ -264,8 +223,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       color: mood.color.withValues(alpha: 0.25),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                          color: mood.color.withValues(alpha: 0.5),
-                          width: 1),
+                          color: mood.color.withValues(alpha: 0.5), width: 1),
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -274,10 +232,8 @@ class _SearchScreenState extends State<SearchScreen> {
                             style: const TextStyle(fontSize: 32)),
                         const SizedBox(height: 6),
                         Text(mood.label,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600)),
+                            style: const TextStyle(color: Colors.white,
+                                fontSize: 14, fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
@@ -292,66 +248,44 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
-class _SongResultTile extends StatelessWidget {
+class _SongResultTile extends ConsumerWidget {
   final Song song;
   final List<Song> queue;
-
   const _SongResultTile({required this.song, required this.queue});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return ListTile(
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: SizedBox(
-          width: 52,
-          height: 52,
+          width: 52, height: 52,
           child: song.coverUrl != null && song.coverUrl!.isNotEmpty
-              ? Image.network(
-                  song.coverUrl!,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (_, child, progress) =>
-                      progress == null
-                          ? child
-                          : const ColoredBox(
-                              color: AppColors.surface,
-                              child: Center(
-                                  child: SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: AppColors.primary))),
-                            ),
+              ? Image.network(song.coverUrl!, fit: BoxFit.cover,
+                  loadingBuilder: (_, child, progress) => progress == null
+                      ? child
+                      : const ColoredBox(color: AppColors.surface,
+                          child: Center(child: SizedBox(width: 18, height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: AppColors.primary)))),
                   errorBuilder: (_, e, st) => const ColoredBox(
-                    color: AppColors.surface,
-                    child:
-                        Icon(Icons.music_note, color: Colors.white),
-                  ),
-                )
-              : const ColoredBox(
-                  color: AppColors.surface,
-                  child: Icon(Icons.music_note, color: Colors.white),
-                ),
+                      color: AppColors.surface,
+                      child: Icon(Icons.music_note, color: Colors.white)))
+              : const ColoredBox(color: AppColors.surface,
+                  child: Icon(Icons.music_note, color: Colors.white)),
         ),
       ),
       title: Text(song.title,
-          style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.w600),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis),
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(song.artist,
           style: const TextStyle(color: AppColors.textMuted),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis),
+          maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: Text(song.durationLabel,
-          style: const TextStyle(
-              color: AppColors.textMuted, fontSize: 12)),
+          style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
       onTap: () {
-        // Atelier 7 pattern: context.read for one-shot method call
-        context.read<PlayerProvider>().play(song, queue: queue);
+        ref.read(playerProvider.notifier).play(song, queue: queue);
         Navigator.pushNamed(context, '/player');
       },
     );

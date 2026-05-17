@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/favorites_provider.dart';
 import '../providers/settings_provider.dart';
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
@@ -20,34 +20,23 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _bootstrap() async {
-    // Store provider refs before any async gap (BuildContext safety)
-    // Atelier 7 pattern: context.read for one-shot async call
-    final auth = context.read<AuthProvider>();
-    final favs = context.read<FavoritesProvider>();
-    final settings = context.read<SettingsProvider>();
-
-    // 1. Resolve auth state + load persisted settings in parallel
     debugPrint('[SPLASH] calling auth.initialize()');
+    // ref is always safe in ConsumerState — no capture needed before async gaps
     await Future.wait([
-      auth.initialize(),
-      settings.load(),
+      ref.read(authProvider.notifier).initialize(),
+      ref.read(settingsProvider.notifier).load(),
     ]);
-    debugPrint('[SPLASH] auth done, isLoggedIn = ${auth.isLoggedIn}');
+    final isLoggedIn = ref.read(authProvider).isLoggedIn;
+    debugPrint('[SPLASH] auth done, isLoggedIn = $isLoggedIn');
 
-    // NOTE: There is no favorites.load() — no SharedPreferences layer exists.
-    // Favorites are synced exclusively from Firestore via syncFromCloud().
-
-    // 2. Sync favorites from cloud (only if signed in), then minimum splash delay
-    debugPrint('[SPLASH] calling favorites.syncFromCloud() (isLoggedIn=${auth.isLoggedIn})');
+    debugPrint('[SPLASH] calling favorites.syncFromCloud() (isLoggedIn=$isLoggedIn)');
     await Future.wait([
       Future.delayed(const Duration(seconds: 1)),
-      if (auth.isLoggedIn) favs.syncFromCloud(),
+      if (isLoggedIn) ref.read(favoritesProvider.notifier).syncFromCloud(),
     ]);
 
     if (!mounted) return;
-
-    // 3. Navigate based on auth state
-    final dest = auth.isLoggedIn ? '/home' : '/onboarding';
+    final dest = isLoggedIn ? '/home' : '/onboarding';
     debugPrint('[SPLASH] all bootstrap done, navigating to $dest');
     Navigator.pushReplacementNamed(context, dest);
   }

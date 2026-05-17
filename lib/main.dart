@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
-import 'theme/app_theme.dart';
+import 'core/theme/app_theme.dart';
 import 'screens/splash_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/auth/login_screen.dart';
@@ -16,28 +16,14 @@ import 'screens/search_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/favorites_screen.dart';
 import 'screens/profile_screen.dart';
-import 'providers/auth_provider.dart';
-import 'providers/mood_provider.dart';
-import 'providers/player_provider.dart';
-import 'providers/favorites_provider.dart';
-import 'providers/settings_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Atelier 7 pattern: MultiProvider at the root so every widget can access state
   runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => MoodProvider()),
-        ChangeNotifierProvider(create: (_) => PlayerProvider()),
-        ChangeNotifierProvider(create: (_) => FavoritesProvider()),
-        ChangeNotifierProvider(create: (_) => SettingsProvider()),
-      ],
-      child: const AudioMoodApp(),
-    ),
+    // ProviderScope replaces MultiProvider — all providers are global constants
+    const ProviderScope(child: AudioMoodApp()),
   );
 }
 

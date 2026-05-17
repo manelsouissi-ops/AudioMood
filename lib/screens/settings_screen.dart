@@ -1,19 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
 import '../widgets/main_scaffold.dart';
 import '../providers/settings_provider.dart';
 import '../providers/player_provider.dart';
 import '../services/search_history_service.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // Atelier 7 pattern: context.watch for live value reads
-    final settings = context.watch<SettingsProvider>();
-
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
     return MainScaffold(
       currentIndex: 4,
       body: SafeArea(
@@ -22,16 +20,10 @@ class SettingsScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Settings',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold),
-              ),
+              const Text('Settings',
+                  style: TextStyle(color: Colors.white, fontSize: 28,
+                      fontWeight: FontWeight.bold)),
               const SizedBox(height: 24),
-
-              // ── Section 1: Playback ──────────────────────────────────
               _sectionLabel('Playback'),
               _card([
                 SwitchListTile(
@@ -42,16 +34,13 @@ class SettingsScreen extends StatelessWidget {
                       style: TextStyle(color: Colors.black45, fontSize: 12)),
                   value: settings.autoPlayNext,
                   activeThumbColor: AppColors.primary,
-                  // Atelier 7 pattern: context.read for one-shot method call
                   onChanged: (val) {
-                    context.read<SettingsProvider>().setAutoPlayNext(val);
-                    context.read<PlayerProvider>().setAutoPlayNext(val);
+                    ref.read(settingsProvider.notifier).setAutoPlayNext(val);
+                    ref.read(playerProvider.notifier).setAutoPlayNext(val);
                   },
                 ),
               ]),
               const SizedBox(height: 20),
-
-              // ── Section 2: Notifications ─────────────────────────────
               _sectionLabel('Notifications'),
               _card([
                 SwitchListTile(
@@ -63,24 +52,20 @@ class SettingsScreen extends StatelessWidget {
                   value: settings.notificationsEnabled,
                   activeThumbColor: AppColors.primary,
                   onChanged: (val) =>
-                      context.read<SettingsProvider>().setNotifications(val),
+                      ref.read(settingsProvider.notifier).setNotifications(val),
                 ),
               ]),
               const SizedBox(height: 20),
-
-              // ── Section 3: Data & Privacy ────────────────────────────
               _sectionLabel('Data & Privacy'),
               _card([
                 ListTile(
-                  leading:
-                      const Icon(Icons.history, color: AppColors.primary),
+                  leading: const Icon(Icons.history, color: AppColors.primary),
                   title: const Text('Clear search history',
                       style: TextStyle(color: AppColors.textOnLight,
                           fontWeight: FontWeight.w500)),
                   subtitle: const Text('Remove all recent searches',
                       style: TextStyle(color: Colors.black45, fontSize: 12)),
-                  trailing: const Icon(Icons.chevron_right,
-                      color: Colors.black38),
+                  trailing: const Icon(Icons.chevron_right, color: Colors.black38),
                   onTap: () => _confirmClearSearchHistory(context),
                 ),
                 const Divider(height: 1, indent: 56, color: Colors.black12),
@@ -92,14 +77,11 @@ class SettingsScreen extends StatelessWidget {
                           fontWeight: FontWeight.w500)),
                   subtitle: const Text('Remove listening history',
                       style: TextStyle(color: Colors.black45, fontSize: 12)),
-                  trailing: const Icon(Icons.chevron_right,
-                      color: Colors.black38),
-                  onTap: () => _confirmClearRecentlyPlayed(context),
+                  trailing: const Icon(Icons.chevron_right, color: Colors.black38),
+                  onTap: () => _confirmClearRecentlyPlayed(context, ref),
                 ),
               ]),
               const SizedBox(height: 20),
-
-              // ── Section 4: About ─────────────────────────────────────
               _sectionLabel('About'),
               _card([
                 const ListTile(
@@ -112,8 +94,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const Divider(height: 1, indent: 56, color: Colors.black12),
                 const ListTile(
-                  leading: Icon(Icons.info_outline,
-                      color: AppColors.textMuted),
+                  leading: Icon(Icons.info_outline, color: AppColors.textMuted),
                   title: Text('App version',
                       style: TextStyle(color: AppColors.textOnLight,
                           fontWeight: FontWeight.w500)),
@@ -132,17 +113,13 @@ class SettingsScreen extends StatelessWidget {
   Widget _sectionLabel(String text) => Padding(
         padding: const EdgeInsets.only(left: 4, bottom: 8),
         child: Text(text.toUpperCase(),
-            style: const TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 1)),
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 11,
+                fontWeight: FontWeight.w600, letterSpacing: 1)),
       );
 
   Widget _card(List<Widget> children) => Container(
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
+          color: Colors.white, borderRadius: BorderRadius.circular(14),
         ),
         child: Column(children: children),
       );
@@ -152,16 +129,12 @@ class SettingsScreen extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Clear search history?'),
-        content:
-            const Text('All recent searches will be removed.'),
+        content: const Text('All recent searches will be removed.'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Clear',
-                  style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Clear', style: TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -173,26 +146,23 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _confirmClearRecentlyPlayed(BuildContext context) async {
+  Future<void> _confirmClearRecentlyPlayed(
+      BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Clear recently played?'),
         content: const Text('Your listening history will be removed.'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Clear',
-                  style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Clear', style: TextStyle(color: Colors.red))),
         ],
       ),
     );
     if (confirmed != true || !context.mounted) return;
-    // Atelier 7 pattern: context.read for one-shot method call
-    context.read<PlayerProvider>().clearRecentlyPlayed();
+    ref.read(playerProvider.notifier).clearRecentlyPlayed();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Recently played cleared')),
     );

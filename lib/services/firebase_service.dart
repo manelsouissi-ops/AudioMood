@@ -18,7 +18,10 @@ class FirebaseService {
       try {
         final moodStr = data['mood'] as String?;
         if (moodStr != null) {
-          mood = MoodType.values.firstWhere((m) => m.name == moodStr);
+          final matches = MoodType.values
+              .where((m) => m.name == moodStr)
+              .toList();
+          mood = matches.isEmpty ? null : matches.first;
         }
       } catch (_) {
         mood = null;
@@ -29,25 +32,26 @@ class FirebaseService {
           ? data['searchQuery'] as String
           : null;
 
-      playlists.add(Playlist(
-        id: doc.id,
-        name: name,
-        mood: mood,
-        coverUrl: (data['coverUrl'] as String?)?.isNotEmpty == true
-            ? data['coverUrl'] as String
-            : null,
-        songs: const [], // populated lazily via DeezerService
-        searchQuery: searchQuery,
-      ));
+      playlists.add(
+        Playlist(
+          id: doc.id,
+          name: name,
+          mood: mood,
+          coverUrl: (data['coverUrl'] as String?)?.isNotEmpty == true
+              ? data['coverUrl'] as String
+              : null,
+          songs: const [], // populated lazily via DeezerService
+          searchQuery: searchQuery,
+        ),
+      );
     }
     return playlists;
   }
 
   Future<void> saveFavorites(String userId, List<String> songIds) async {
-    await _db.collection('users').doc(userId).set(
-      {'favoriteSongIds': songIds},
-      SetOptions(merge: true),
-    );
+    await _db.collection('users').doc(userId).set({
+      'favoriteSongIds': songIds,
+    }, SetOptions(merge: true));
   }
 
   Future<List<String>> loadFavoriteSongIds(String userId) async {

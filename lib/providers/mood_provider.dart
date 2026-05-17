@@ -1,26 +1,38 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/mood.dart';
 
-class MoodProvider with ChangeNotifier {
-  MoodResult? _current;
-  final List<MoodResult> _history = [];
+// ── State ────────────────────────────────────────────────────────────────────
 
-  MoodResult? get current => _current;
-  List<MoodResult> get history => List.unmodifiable(_history);
-  bool get hasDetectedMood => _current != null;
+class MoodState {
+  final MoodResult? current;
+  final List<MoodResult> history;
+
+  const MoodState({this.current, this.history = const []});
+
+  bool get hasDetectedMood => current != null;
+}
+
+// ── Notifier ─────────────────────────────────────────────────────────────────
+
+class MoodNotifier extends Notifier<MoodState> {
+  @override
+  MoodState build() => const MoodState();
 
   void setMood(MoodType mood, double confidence) {
-    _current = MoodResult(
+    final result = MoodResult(
       mood: mood,
       confidence: confidence,
       detectedAt: DateTime.now(),
     );
-    _history.insert(0, _current!);
-    notifyListeners(); // Atelier 7 pattern
+    state = MoodState(
+      current: result,
+      history: [result, ...state.history],
+    );
   }
 
-  void clear() {
-    _current = null;
-    notifyListeners(); // Atelier 7 pattern
-  }
+  void clear() => state = MoodState(history: state.history);
 }
+
+// ── Provider ─────────────────────────────────────────────────────────────────
+
+final moodProvider = NotifierProvider<MoodNotifier, MoodState>(MoodNotifier.new);

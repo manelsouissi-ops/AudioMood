@@ -1,19 +1,19 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/mood_provider.dart';
 import '../../services/mood_service.dart';
 
-class CameraScanScreen extends StatefulWidget {
+class CameraScanScreen extends ConsumerStatefulWidget {
   const CameraScanScreen({super.key});
 
   @override
-  State<CameraScanScreen> createState() => _CameraScanScreenState();
+  ConsumerState<CameraScanScreen> createState() => _CameraScanScreenState();
 }
 
-class _CameraScanScreenState extends State<CameraScanScreen> {
+class _CameraScanScreenState extends ConsumerState<CameraScanScreen> {
   bool _isAnalyzing = false;
 
   Future<void> _scan() async {
@@ -22,25 +22,19 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
       source: ImageSource.camera,
       preferredCameraDevice: CameraDevice.front,
     );
-    if (pickedFile == null) return; // user cancelled
-
+    if (pickedFile == null) return;
     if (!mounted) return;
     setState(() => _isAnalyzing = true);
-    // Store provider ref before async gap (BuildContext safety)
-    final moodProvider = context.read<MoodProvider>();
     try {
       final result = await MoodService().detectMood(File(pickedFile.path));
       if (!mounted) return;
-      // Atelier 7 pattern: context.read for one-shot method call
-      moodProvider.setMood(result.mood, result.confidence);
+      ref.read(moodProvider.notifier).setMood(result.mood, result.confidence);
       Navigator.pushReplacementNamed(context, '/mood-result');
     } catch (e) {
       if (!mounted) return;
       setState(() => _isAnalyzing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content:
-                Text(e.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
     }
   }
@@ -54,7 +48,6 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
           SafeArea(
             child: Column(
               children: [
-                // Top bar
                 Padding(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 12),
@@ -65,72 +58,45 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
                         onPressed: () => Navigator.pop(context),
                       ),
                       const Expanded(
-                        child: Text(
-                          'Mood Scan',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        child: Text('Mood Scan',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.white, fontSize: 18,
+                                fontWeight: FontWeight.bold)),
                       ),
                       const SizedBox(width: 48),
                     ],
                   ),
                 ),
-
                 const Spacer(),
-
-                // Face frame with L-shaped corner brackets
                 Center(
                   child: SizedBox(
-                    width: 260,
-                    height: 320,
+                    width: 260, height: 320,
                     child: Stack(
                       children: [
-                        // Subtle background border
                         Container(
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(20),
-                            border:
-                                Border.all(color: Colors.white12, width: 1),
+                            border: Border.all(color: Colors.white12, width: 1),
                           ),
                         ),
-                        // Corner brackets via CustomPaint
                         CustomPaint(
                           size: const Size(260, 320),
                           painter: _CornerBracketPainter(),
                         ),
-                        // Face placeholder icon
-                        const Center(
-                          child: Icon(Icons.face_outlined,
-                              size: 80, color: Colors.white24),
-                        ),
+                        const Center(child: Icon(Icons.face_outlined,
+                            size: 80, color: Colors.white24)),
                       ],
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 32),
-
-                const Text(
-                  'Position your face in the frame',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold),
-                ),
+                const Text('Position your face in the frame',
+                    style: TextStyle(color: Colors.white, fontSize: 18,
+                        fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                const Text(
-                  "Make sure you're in good lighting",
-                  style:
-                      TextStyle(color: AppColors.textMuted, fontSize: 14),
-                ),
-
+                const Text("Make sure you're in good lighting",
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
                 const Spacer(),
-
-                // Scan button
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
                   child: SizedBox(
@@ -140,14 +106,12 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.black,
                         foregroundColor: Colors.white,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
                       child: const Text('Scan',
-                          style: TextStyle(
-                              fontSize: 16,
+                          style: TextStyle(fontSize: 16,
                               fontWeight: FontWeight.w600)),
                     ),
                   ),
@@ -155,8 +119,6 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
               ],
             ),
           ),
-
-          // Loading overlay
           if (_isAnalyzing)
             Container(
               color: Colors.black54,
@@ -166,11 +128,8 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
                   children: [
                     CircularProgressIndicator(color: AppColors.primary),
                     SizedBox(height: 20),
-                    Text(
-                      'Analyzing your mood...',
-                      style:
-                          TextStyle(color: Colors.white, fontSize: 16),
-                    ),
+                    Text('Analyzing your mood...',
+                        style: TextStyle(color: Colors.white, fontSize: 16)),
                   ],
                 ),
               ),
@@ -181,7 +140,6 @@ class _CameraScanScreenState extends State<CameraScanScreen> {
   }
 }
 
-/// Draws four L-shaped corner brackets inside the face frame.
 class _CornerBracketPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -190,24 +148,13 @@ class _CornerBracketPainter extends CustomPainter {
       ..strokeWidth = 3
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
-
-    const arm = 28.0; // length of each bracket arm
-
-    // Top-left
+    const arm = 28.0;
     canvas.drawLine(Offset.zero, const Offset(arm, 0), paint);
     canvas.drawLine(Offset.zero, const Offset(0, arm), paint);
-
-    // Top-right
     canvas.drawLine(Offset(size.width, 0), Offset(size.width - arm, 0), paint);
     canvas.drawLine(Offset(size.width, 0), Offset(size.width, arm), paint);
-
-    // Bottom-left
-    canvas.drawLine(
-        Offset(0, size.height), Offset(arm, size.height), paint);
-    canvas.drawLine(
-        Offset(0, size.height), Offset(0, size.height - arm), paint);
-
-    // Bottom-right
+    canvas.drawLine(Offset(0, size.height), Offset(arm, size.height), paint);
+    canvas.drawLine(Offset(0, size.height), Offset(0, size.height - arm), paint);
     canvas.drawLine(Offset(size.width, size.height),
         Offset(size.width - arm, size.height), paint);
     canvas.drawLine(Offset(size.width, size.height),

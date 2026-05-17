@@ -1,76 +1,87 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter/foundation.dart';
 import '../models/app_user.dart';
+import 'favorites_provider.dart';
+import 'mood_provider.dart';
+import 'player_provider.dart';
 
-class AuthProvider with ChangeNotifier {
+// ── State ────────────────────────────────────────────────────────────────────
+
+class AuthState {
+  final AppUser? user;
+  const AuthState({this.user});
+
+  bool get isLoggedIn => user != null;
+  String get displayName => user?.name ?? 'Guest';
+  String get email => user?.email ?? '';
+  String? get userId => user?.id;
+}
+
+// ── Notifier ─────────────────────────────────────────────────────────────────
+
+class AuthNotifier extends Notifier<AuthState> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
-  AppUser? _user;
+  @override
+  AuthState build() => const AuthState();
 
-  AppUser? get user => _user;
-  bool get isLoggedIn => _user != null;
-  String get displayName => _user?.name ?? 'Guest';
-  String get email => _user?.email ?? '';
-  String? get userId => _user?.id;
-
-  /// Check if already signed in; initialize Google Sign-In (v7 requirement).
-  /// Called from splash screen before navigating.
   Future<void> initialize() async {
     await _googleSignIn.initialize();
     final firebaseUser = _auth.currentUser;
     if (firebaseUser != null) {
-      _user = _userFromFirebase(firebaseUser);
-      notifyListeners(); // Atelier 7 pattern
+      state = AuthState(user: _userFromFirebase(firebaseUser));
     }
   }
 
-  Stream<AppUser?> get authChanges => _auth.authStateChanges().map(
-        (u) => u == null ? null : _userFromFirebase(u),
-      );
+  /// Wipe all per-user Riverpod state before switching accounts.
+  /// Called at the start of every login path and inside logout().
+  void _clearUserState() {
+    ref.invalidate(favoritesProvider);
+    ref.invalidate(moodProvider);
+    ref.invalidate(playerProvider);
+  }
 
   Future<void> login(String email, String password) async {
+    _clearUserState();
     final cred = await _auth.signInWithEmailAndPassword(
       email: email.trim(),
       password: password,
     );
-    _user = _userFromFirebase(cred.user!);
-    notifyListeners(); // Atelier 7 pattern
+    state = AuthState(user: _userFromFirebase(cred.user!));
   }
 
   Future<void> signup(String name, String email, String password) async {
+    _clearUserState();
     final cred = await _auth.createUserWithEmailAndPassword(
       email: email.trim(),
       password: password,
     );
     await cred.user!.updateDisplayName(name);
     await cred.user!.reload();
-    _user = AppUser(
-      id: cred.user!.uid,
-      name: name,
-      email: email.trim(),
-    );
-    // Save profile to Firestore for future profile features (Atelier 9 pattern)
-    await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).set({
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(cred.user!.uid)
+        .set({
       'name': name,
       'email': email.trim(),
       'createdAt': FieldValue.serverTimestamp(),
     });
-    notifyListeners(); // Atelier 7 pattern
+    state = AuthState(
+      user: AppUser(id: cred.user!.uid, name: name, email: email.trim()),
+    );
   }
 
   Future<void> loginWithGoogle() async {
-    // google_sign_in v7: use authenticate() instead of signIn()
+    _clearUserState();
     final googleUser = await _googleSignIn.authenticate();
     final googleAuth = googleUser.authentication;
     final credential = GoogleAuthProvider.credential(
       idToken: googleAuth.idToken,
     );
     final cred = await _auth.signInWithCredential(credential);
-    _user = _userFromFirebase(cred.user!);
-    // Save/merge user profile in Firestore
     await FirebaseFirestore.instance
         .collection('users')
         .doc(cred.user!.uid)
@@ -79,7 +90,7 @@ class AuthProvider with ChangeNotifier {
       'email': cred.user!.email ?? '',
       'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
-    notifyListeners(); // Atelier 7 pattern
+    state = AuthState(user: _userFromFirebase(cred.user!));
   }
 
   Future<void> forgotPassword(String email) async {
@@ -91,8 +102,9 @@ class AuthProvider with ChangeNotifier {
       await _googleSignIn.signOut();
     } catch (_) {}
     await _auth.signOut();
-    _user = null;
-    notifyListeners(); // Atelier 7 pattern
+    // Reset all per-user state — covers every logout path (drawer, profile, etc.)
+    _clearUserState();
+    state = const AuthState();
   }
 
   AppUser _userFromFirebase(User u) => AppUser(
@@ -102,3 +114,7 @@ class AuthProvider with ChangeNotifier {
         avatarUrl: u.photoURL,
       );
 }
+
+// ── Provider ─────────────────────────────────────────────────────────────────
+
+final authProvider = NotifierProvider<AuthNotifier, AuthState>(AuthNotifier.new);
